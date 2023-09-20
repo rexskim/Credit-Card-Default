@@ -1,0 +1,114 @@
+---
+title: "Project Demonstration"
+output: html_document
+---
+
+### Import libraries
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(survival)
+library(ggfortify)
+library(Hmisc)
+library("survminer")
+```
+
+### Read data
+```{r}
+data <- read.csv("data.csv")
+```
+
+### Survival Methods
+#### Basic Kaplan-Meier Survival Curve
+The following code produces the KM survival curve without any variable grouping as seen in the project report. Notice the gradual decline in survival probability as time progresses, plateauing at around 94% survival probability near the end of the observation period. In other words, the probability of not defaulting gradually decreases as time progresses. 
+```{r}
+# Survival curve without grouping by a variable
+km_fit <- survfit(Surv(time, default) ~ 1, data = data)
+km_fit <- autoplot(km_fit, censor=FALSE, surv.colour="#00BFC4")
+km_fit <- km_fit + 
+  ggtitle("Survival Curve") +
+  labs(x = "Time (in months)", y="Survival Probability") +
+  theme(text=element_text(size=14))
+km_fit
+```
+
+#### Kaplan-Meier Survival Curve based on Employment Status
+The following code produces the KM survival curve for employment status. It shows the survival curves for both employed and unemployed groups. The employed group generally had higher survival probability compared to the unemployed group, most likely due to the employed group being about to pay off loans by using the money they earn from working.  
+```{r warning=FALSE}
+# survival curve grouped by employment status
+df_employed <- data %>% 
+  mutate(
+    days_employed = as.factor(ifelse(days_employed == 0, 0, 1)))
+employed_km_fit <- survfit(Surv(time, default) ~ days_employed, data=df_employed)
+employed.plot <- autoplot(employed_km_fit, censor=FALSE)
+employed.plot <- employed.plot + 
+  ggtitle("Survival Curve based on Employment Status") +
+  labs(x = "Time (in months)", y="Survival Probability") +
+  guides(fill=FALSE) +
+  labs(colour = "Employment Status") +
+  scale_color_manual(labels = c("unemployed", "employed"), values = c("#F8766D", "#00BFC4")) +
+  theme(text=element_text(size=14)) +
+  theme(legend.position = c(0.16, 0.15))
+employed.plot
+```
+
+#### Kaplan-Meier Survival Curve based on Sex  
+The following code produces the KM survival curve based on sex. It shows that females tend to have higher survival rates than males, until near the tail end of the observation period of 60 months where the survival probabilities even out for both groups.  
+```{r warning=FALSE}
+# Survival curve grouped by sex
+sex_km_fit <- survfit(Surv(time, default) ~ sex, data = data)
+sex.plot <- autoplot(sex_km_fit, censor=FALSE)
+sex.plot <- sex.plot + 
+  ggtitle("Survival Curve based on Sex") +
+  labs(x = "Time (in months)", y="Survival Probability") +
+  guides(fill=FALSE) +
+  labs(colour = "Sex") +
+  scale_color_manual(labels = c("Female", "Male"), values = c("#F8766D", "#00BFC4")) +
+  theme(text=element_text(size=14)) +
+  theme(legend.position = c(0.09, 0.15))
+sex.plot
+```
+
+#### Compute the C-Index for the Kaplan-Meier Curves
+The concordance index (C-index) is a measure of the discriminatory power for survival models. An index close to 1 indicates a strong discriminatory power while an index close to 0.5 indicates a weak discriminatory power (equivalent to random guessing). Here we compute the C-index for the two previous KM curves. 
+```{r}
+# C-index for KM
+data_cindex <- data %>% 
+  mutate(sex=ifelse(sex=="M", 0, 1))
+
+# C-index for KM curve based on sex
+rcorr.cens(data_cindex$sex, Surv(data_cindex$time, data_cindex$default))
+# C-index for KM curve based on employment status
+rcorr.cens(data$days_employed, Surv(data$time, data$default))
+```
+The C-index for KM curve based on sex is 0.536 while the C-index for the KM curve based on employment status is 0.559. The employment status KM curve has higher discriminatory power (performs better) than the sex KM curve. However, both of the models have a C-index that is only slightly better than 0.5, suggesting that these models are only slightly better than simple random guessing. 
+
+#### Cox Proportional Hazards
+First, we fit the CPH model based on the features that were found to be most significant during the development of the logistic regression classifier. The following code block produces a summary of the output for this CPH model. With this output, we can make interpretations about the covariates and how they affect the survival probability of not defaulting. The model is also flexible as it can be easily adapted to use other covariates that were in the dataset. Additionally, the C-index can be seen towards the bottom of the summary output.  
+```{r warning=FALSE}
+cox <- coxph(Surv(time, default) ~ sex + has_property + days_employed + marital_status + occupation_type, data=data)
+summary(cox)
+```
+
+The CPH curve associated with the model was plotted next. We can see that the survival rate is slightly higher than the KM model at the end of the observation period. 
+```{r}
+cox_fit <- survfit(cox)
+autoplot(cox_fit, censor=FALSE, surv.colour="#00BFC4") +
+  ggtitle("Survival Curve") +
+  labs(x = "Time (in months)", y="Survival Probability") +
+  theme(text=element_text(size=14))
+```
+
+The last plot created was the CPH model based on sex. We can see that females tend to have higher survival probabilities than males while holding all other covariates in the model constant. This reinforces the findings we saw in the KM curve based on sex where females generally had higher survival probabilities than males. 
+```{r warning=FALSE}
+sex_df <- with(data,
+               data.frame(sex = c("M", "F"),
+                          has_property = c("Y", "Y"),
+                          days_employed = rep(mean(days_employed, na.rm =TRUE), 2),
+                          marital_status = c("Single / not married", "Single / not married"),
+                          occupation_type = c("", "")
+                          )
+               )
+
+fit <- survfit(cox, newdata=sex_df,)
+ggsurvplot(fit, conf.int = TRUE, data=data, ylim=c(0.9,1), surv.scale = "percent", censor=FALSE, title="Survival Curve based on Sex", legend.labs = c("Male", "Female"), xlab="Time (in months)")
+```

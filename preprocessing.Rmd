@@ -1,0 +1,120 @@
+---
+title: "Preprocessing"
+output: html_document
+---
+### Import libraries
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+```
+
+### Read datasets
+```{r}
+application_record <- read.csv("application_record.csv")
+credit_record <- read.csv("credit_record.csv")
+```
+
+### Preprocessing
+```{r}
+# Compute the default status (>60 days overdue) in credit_record data
+credit_record <- credit_record %>% 
+  mutate(status = ifelse((STATUS == '2' | STATUS == '3' |
+                            STATUS == '4'| STATUS == '5'), 1, 0))
+
+# Transform data from long format to wide format
+credit_wide <- credit_record %>% 
+  pivot_wider(id_cols = ID, names_from = MONTHS_BALANCE, values_from = status)
+
+# Combine application table and credit table
+# and drop duplicate entries
+data <- merge(credit_wide, application_record, by.y = "ID")
+data <- data[,-1]
+data <- select(data, -c("FLAG_MOBIL"))
+data <- data %>% distinct()
+
+# Compute time and default columns
+times = c()
+defaults = c()
+for (r in 1:nrow(data)) {
+  defaulted = FALSE
+  time = 0
+  for (c in 1:61) {
+    if (!(is.na(data[r,c]))) {
+      time = time + 1
+      if (data[r, c] == 1) {
+        times <- append(times, time)
+        defaults <- append(defaults, 1)
+        defaulted = TRUE
+        break
+      } 
+    }
+  }
+  if (!defaulted) {
+    times <- append(times, time)
+    defaults <- append(defaults, 0)
+  }
+}
+
+# Add columns to dataframe
+data['time'] <- times
+data['default'] <- defaults
+
+# Rename columns
+data <- plyr::rename(data, 
+       c("0" = "month_0","-1" = "month_1","-2" = "month_2","-3" = "month_3","-4" = "month_4",
+         "-5" = "month_5","-6" = "month_6","-7" = "month_7","-8" = "month_8","-9" = "month_9",
+         "-10" = "month_10","-11" = "month_11","-12" = "month_12","-13" = "month_13","-14" = "month_14",
+         "-15" = "month_15","-16" = "month_16","-17" = "month_17","-18" = "month_18","-19" = "month_19",
+         "-20" = "month_20","-21" = "month_21","-22" = "month_22","-23" = "month_23","-24" = "month_24",
+         "-25" = "month_25","-26" = "month_26","-27" = "month_27","-28" = "month_28","-29" = "month_29",
+         "-30" = "month_30","-31" = "month_31","-32" = "month_32","-33" = "month_33","-34" = "month_34",
+         "-35" = "month_35","-36" = "month_36","-37" = "month_37","-38" = "month_38","-39" = "month_39",
+         "-40" = "month_40","-41" = "month_41","-42" = "month_42","-43" = "month_43","-44" = "month_44",
+         "-45" = "month_45","-46" = "month_46","-47" = "month_47","-48" = "month_48","-49" = "month_49",
+         "-50" = "month_50","-51" = "month_51","-52" = "month_52","-53" = "month_53","-54" = "month_54",
+         "-55" = "month_55","-56" = "month_56","-57" = "month_57","-58" = "month_58","-59" = "month_59",
+         "-60" = "month_60",
+         "CODE_GENDER" = "sex",
+         "FLAG_OWN_CAR" = "has_car",
+         "FLAG_OWN_REALTY" = "has_property",
+         "CNT_CHILDREN" = "num_children",
+         "AMT_INCOME_TOTAL" = "annual_income",
+         "NAME_INCOME_TYPE" = "income_type",
+         "NAME_EDUCATION_TYPE" = "education_type",
+         "NAME_FAMILY_STATUS" = "marital_status",
+         "NAME_HOUSING_TYPE" = "housing_type",
+         "DAYS_BIRTH" = "age",
+         "DAYS_EMPLOYED" = "days_employed",
+         "FLAG_WORK_PHONE" = "has_work_phone",
+         "FLAG_PHONE" = "has_phone",
+         "FLAG_EMAIL" = "has_email",
+         "OCCUPATION_TYPE" = "occupation_type",
+         "CNT_FAM_MEMBERS" = "num_fam_members"))
+
+# Mutate data types of columns
+data <- data %>% 
+  mutate(
+    age = floor(abs(age) / 365.25),
+    days_employed = ifelse(days_employed > 0, 0, abs(days_employed)),
+  )
+data_as_numerical <- data %>% 
+  mutate(
+    sex = as.factor(ifelse(sex == 'M', 0, 1)),
+    has_car = as.factor(ifelse(has_car == 'N', 0, 1)),
+    has_property = as.factor(ifelse(has_property == 'N', 0, 1)),
+    income_type = as.numeric(as.factor(income_type)),
+    education_type = as.numeric(as.factor(education_type)),
+    marital_status = as.numeric(as.factor(marital_status)),
+    housing_type = as.numeric(as.factor(housing_type)),
+    has_work_phone = as.factor(has_work_phone),
+    has_phone = as.factor(has_phone),
+    has_email = as.factor(has_email),
+    occupation_type = as.numeric(as.factor(occupation_type))
+  )
+```
+
+### Write data to csv
+```{r}
+write.csv(data, "data.csv", row.names=FALSE)
+write.csv(data_as_numerical, "data_as_numerical.csv", row.names=FALSE)
+```
+

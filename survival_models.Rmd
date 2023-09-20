@@ -1,0 +1,96 @@
+---
+title: "Survival Models"
+output: html_document
+---
+
+### Import libraries
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(survival)
+library(ggfortify)
+library(Hmisc)
+library("survminer")
+```
+
+### Read data
+```{r}
+data <- read.csv("data.csv")
+```
+
+### Kaplan-Meier
+```{r}
+# Survival curve without grouping by a variable
+km_fit <- survfit(Surv(time, default) ~ 1, data = data)
+km_fit <- autoplot(km_fit, censor=FALSE, surv.colour="#00BFC4")
+km_fit <- km_fit + 
+  ggtitle("Survival Curve") +
+  labs(x = "Time (in months)", y="Survival Probability") +
+  theme(text=element_text(size=14))
+km_fit
+```
+
+```{r}
+# Survival curve grouped by sex
+sex_km_fit <- survfit(Surv(time, default) ~ sex, data = data)
+sex.plot <- autoplot(sex_km_fit, censor=FALSE)
+sex.plot <- sex.plot + 
+  ggtitle("Survival Curve based on Sex") +
+  labs(x = "Time (in months)", y="Survival Probability") +
+  guides(fill=FALSE) +
+  labs(colour = "Sex") +
+  scale_color_manual(labels = c("Female", "Male"), values = c("#F8766D", "#00BFC4")) +
+  theme(text=element_text(size=14)) +
+  theme(legend.position = c(0.09, 0.15))
+sex.plot
+```
+
+```{r}
+# survival curve grouped by employment status
+df_employed <- data %>% 
+  mutate(
+    days_employed = as.factor(ifelse(days_employed == 0, 0, 1)))
+employed_km_fit <- survfit(Surv(time, default) ~ days_employed, data=df_employed)
+employed.plot <- autoplot(employed_km_fit, censor=FALSE)
+employed.plot <- employed.plot + 
+  ggtitle("Survival Curve based on Employment Status") +
+  labs(x = "Time (in months)", y="Survival Probability") +
+  guides(fill=FALSE) +
+  labs(colour = "Employment Status") +
+  scale_color_manual(labels = c("unemployed", "employed"), values = c("#F8766D", "#00BFC4")) +
+  theme(text=element_text(size=14)) +
+  theme(legend.position = c(0.16, 0.15))
+employed.plot
+```
+```{r}
+# C-index for KM
+data_cindex <- data %>% 
+  mutate(sex=ifelse(sex=="M", 0, 1))
+
+rcorr.cens(data_cindex$sex, Surv(data_cindex$time, data_cindex$default))
+rcorr.cens(data$days_employed, Surv(data$time, data$default))
+```
+
+### Cox Proportional Hazards
+```{r warning=FALSE}
+cox <- coxph(Surv(time, default) ~ sex + has_property + days_employed + marital_status + occupation_type, data=data)
+summary(cox)
+cox_fit <- survfit(cox)
+autoplot(cox_fit, censor=FALSE, surv.colour="#00BFC4") +
+  ggtitle("Survival Curve") +
+  labs(x = "Time (in months)", y="Survival Probability") +
+  theme(text=element_text(size=14))
+```
+```{r warning=FALSE}
+sex_df <- with(data,
+               data.frame(sex = c("M", "F"),
+                          has_property = c("Y", "Y"),
+                          days_employed = rep(mean(days_employed, na.rm =TRUE), 2),
+                          marital_status = c("Single / not married", "Single / not married"),
+                          occupation_type = c("", "")
+                          )
+               )
+
+fit <- survfit(cox, newdata=sex_df,)
+ggsurvplot(fit, conf.int = TRUE, data=data, ylim=c(0.9,1), surv.scale = "percent", censor=FALSE, title="Survival Curve based on Sex", legend.labs = c("Male", "Female"), xlab="Time (in months)")
+```
+
