@@ -1,4 +1,4 @@
-#### This is the README for Group 7 of STATS 170. This project is trying to predict and analyze Credit Card Default Rates using Survival Analysis and other methods.
+#### This is the README for the senior capstone project that attempts to predict and analyze Credit Card Default Rates using Survival Analysis and other methods.
 
 Created by Ethan So, Michael Chong, Rex Kim, Yoon Kim, and William Chiang
 
